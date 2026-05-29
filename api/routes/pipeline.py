@@ -44,13 +44,13 @@ async def _run_summarize(new_posts=None):
             posts_path = os.path.join(BASE_DIR, "data", "posts.json")
             summarized_path = os.path.join(BASE_DIR, "data", "summarized.json")
 
-            with open(posts_path) as f:
+            with open(posts_path, encoding="utf-8") as f:
                 all_posts = json.load(f)
 
             existing_urls = set()
 
             if os.path.exists(summarized_path):
-                with open(summarized_path) as f:
+                with open(summarized_path, encoding="utf-8") as f:
                     existing_urls = {p["url"] for p in json.load(f)}
 
             new_posts = [p for p in all_posts if p["url"] not in existing_urls]
@@ -72,7 +72,7 @@ async def _run_build_graph():
 
     try:
         summarized_path = os.path.join(BASE_DIR, "data", "summarized.json")
-        with open(summarized_path) as f:
+        with open(summarized_path, encoding="utf-8") as f:
             posts = json.load(f)
 
         from agents.graph_builder_agent import build_graph, save_graph
@@ -91,10 +91,21 @@ async def _run_email(new_posts: list = None):
     _status["email"] = "running"
     try:
         from agents.email_agent import send_briefing
-        await asyncio.to_thread(send_briefing, new_posts)
+
+        if new_posts is not None:
+            new_urls = {p["url"] for p in new_posts}
+            summarized_path = os.path.join(BASE_DIR, "data", "summarized.json")
+            with open(summarized_path, encoding="utf-8") as f:
+                all_summarized = json.load(f)
+            posts_to_send = [p for p in all_summarized if p["url"] in new_urls]
+        else:
+            posts_to_send = None
+
+        await asyncio.to_thread(send_briefing, posts_to_send)
         _status["email"] = "done"
     except Exception as e:
         _status["email"] = f"error: {e}"
+
 
 
 async def _run_pipeline():

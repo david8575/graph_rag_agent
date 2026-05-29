@@ -15,11 +15,11 @@ async def status():
     summarized_path = os.path.join(BASE_DIR, "data", "summarized.json")
     graph_path = os.path.join(BASE_DIR, "data", "graph.json")
 
-    result["articles"] = len(json.load(open(posts_path))) if os.path.exists(posts_path) else 0
-    result["summarized"] = len(json.load(open(summarized_path))) if os.path.exists(summarized_path) else 0
+    result["articles"] = len(json.load(open(posts_path, encoding="utf-8"))) if os.path.exists(posts_path) else 0
+    result["summarized"] = len(json.load(open(summarized_path, encoding="utf-8"))) if os.path.exists(summarized_path) else 0
 
     if os.path.exists(graph_path):
-        g = json.load(open(graph_path))
+        g = json.load(open(graph_path, encoding="utf-8"))
         result["nodes"] = len(g.get("nodes", []))
         result["edges"] = len(g.get("links", []))
     else:
@@ -42,5 +42,5 @@ async def graph_data():
             "links": []
         }
 
-    with open(graph_path) as f:
+    with open(graph_path, encoding="utf-8") as f:
         return json.load(f)
