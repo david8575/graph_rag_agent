@@ -36,9 +36,17 @@ def build_email_body(posts: list) -> str:
     return "\n".join(lines)
 
 
-def send_briefing():
-    posts = load_recent_posts()
+def send_briefing(posts: list = None):
+    if posts is None:
+        posts = load_recent_posts()
+    else:
+        posts.sort(key=lambda x: x.get("points", 0), reverse=True)
+        posts = posts[:10]
 
+    if not posts:
+        print("[email] no posts to send")
+        return
+    
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[GeekNews] 오늘의 기술 브리핑 {datetime.now().strftime('%m/%d')}"
     msg["From"] = GMAIL_USER
@@ -52,6 +60,7 @@ def send_briefing():
         server.sendmail(GMAIL_USER, GMAIL_TO, msg.as_string())
 
     print(f"[email] sent to {GMAIL_TO} ({len(posts)} posts)")
+
 
 
 if __name__ == "__main__":

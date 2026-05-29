@@ -87,17 +87,15 @@ async def _run_build_graph():
     except Exception as e:
         _status["build-graph"] = f"error: {e}"
 
-async def _run_email():
+async def _run_email(new_posts: list = None):
     _status["email"] = "running"
-
     try:
         from agents.email_agent import send_briefing
-        await asyncio.to_thread(send_briefing)
-
+        await asyncio.to_thread(send_briefing, new_posts)
         _status["email"] = "done"
-
     except Exception as e:
         _status["email"] = f"error: {e}"
+
 
 async def _run_pipeline():
     _status["pipeline"] = "running"
@@ -109,7 +107,7 @@ async def _run_pipeline():
 
         if new_posts:
             await _run_build_graph()
-            await _run_email()
+            await _run_email(new_posts)
 
         _status["pipeline"] = "done"
 
