@@ -1,0 +1,14 @@
+**/__pycache__
+*.pyc
+.venv
+
+data/*.html
+data/*.json
+
+lib
+
+GeekNews-MCP-Server/
+
+.env
+
+.DS_Store
