@@ -179,4 +179,7 @@ def ask(question: str) -> str:
         "answer": ""
     })
 
-    return result["answer"]
+    return {
+        "answer": result["answer"],
+        "retrieved_articles": [a["url"] for a in result["retrieved_articles"]]
+    }

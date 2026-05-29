@@ -31,3 +31,16 @@ async def status():
 @router.get("/graph")
 async def graph():
     return FileResponse(os.path.join(BASE_DIR, "data", "graph.html"), media_type="text/html")
+
+@router.get("/graph/data")
+async def graph_data():
+    graph_path = os.path.join(BASE_DIR, "data", "graph.json")
+
+    if not os.path.exists(graph_path):
+        return {
+            "nodes": [],
+            "links": []
+        }
+
+    with open(graph_path) as f:
+        return json.load(f)

@@ -10,7 +10,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 _status = {
     "collect": "idle",
     "summarize": "idle",
-    "build-graㅔh": "idle",
+    "build-graph": "idle",
+    "email": "idle",
     "pipeline": "idle"
 }
 
@@ -37,7 +38,7 @@ async def _run_summarize(new_posts=None):
     _status["summarize"] = "running"
 
     try: 
-        from agents.summarizer_agent import summarize_post, save_summarized
+        from agents.summarizer_agent import summarize_posts, save_summarized
 
         if new_posts is None:
             posts_path = os.path.join(BASE_DIR, "data", "posts.json")
@@ -55,7 +56,7 @@ async def _run_summarize(new_posts=None):
             new_posts = [p for p in all_posts if p["url"] not in existing_urls]
 
         if new_posts:
-            summarized = await asyncio.to_thread(summarize_post, new_posts)
+            summarized = await asyncio.to_thread(summarize_posts, new_posts)
             await asyncio.to_thread(save_summarized, summarized)
 
             _status["summarize"] = f"done ({len(summarized)} summarized)"
@@ -67,7 +68,7 @@ async def _run_summarize(new_posts=None):
         _status["summarize"] = f"error: {e}"
 
 async def _run_build_graph():
-    _status["build-grpah"] = "running"
+    _status["build-graph"] = "running"
 
     try:
         summarized_path = os.path.join(BASE_DIR, "data", "summarized.json")
@@ -86,13 +87,29 @@ async def _run_build_graph():
     except Exception as e:
         _status["build-graph"] = f"error: {e}"
 
+async def _run_email():
+    _status["email"] = "running"
+
+    try:
+        from agents.email_agent import send_briefing
+        await asyncio.to_thread(send_briefing)
+
+        _status["email"] = "done"
+
+    except Exception as e:
+        _status["email"] = f"error: {e}"
+
 async def _run_pipeline():
     _status["pipeline"] = "running"
 
     try: 
         new_posts = await _run_collect()
         await _run_summarize(new_posts)
-        await _run_build_graph()
+       
+
+        if new_posts:
+            await _run_build_graph()
+            await _run_email()
 
         _status["pipeline"] = "done"
 
@@ -138,6 +155,18 @@ async def build_graph_route(background_tasks: BackgroundTasks):
     return {
         "status": "started", 
         "task": "build-graph"
+    }
+
+@router.post("/email")
+async def send_email(background_tasks: BackgroundTasks):
+    if _status["email"] == "running":
+        return {
+            "status": "already running"
+        }
+    background_tasks.add_task(_run_email)
+    return {
+        "status": "started",            
+        "task": "email"
     }
 
 @router.post("/run")

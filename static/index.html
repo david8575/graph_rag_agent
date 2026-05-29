@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Graph RAG Agent</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        display: flex;
+        height: 100vh;
+        background: #1a1a2e;
+        color: white;
+        font-family: sans-serif;
+      }
+
+      #left {
+        width: 380px;
+        min-width: 320px;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid #333;
+        padding: 20px;
+        gap: 12px;
+      }
+
+      h1 {
+        font-size: 16px;
+        color: #4a90d9;
+      }
+
+      #question {
+        width: 100%;
+        padding: 10px;
+        background: #16213e;
+        border: 1px solid #444;
+        border-radius: 6px;
+        color: white;
+        resize: none;
+        font-size: 14px;
+      }
+
+      #ask-btn {
+        padding: 10px;
+        background: #4a90d9;
+        border: none;
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      #ask-btn:hover {
+        background: #357abd;
+      }
+      #ask-btn:disabled {
+        background: #555;
+        cursor: not-allowed;
+      }
+
+      #answer-box {
+        flex: 1;
+        overflow-y: auto;
+        background: #16213e;
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 14px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+        color: #ccc;
+      }
+
+      #articles {
+        font-size: 12px;
+        color: #888;
+        max-height: 120px;
+        overflow-y: auto;
+      }
+      #articles a {
+        color: #4a90d9;
+        display: block;
+        margin: 2px 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      #right {
+        flex: 1;
+        position: relative;
+      }
+      #graph {
+        width: 100%;
+        height: 100%;
+      }
+
+      #legend {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: #16213e;
+        border: 1px solid #444;
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 12px;
+      }
+      .dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="left">
+      <h1>GeekNews Graph RAG</h1>
+      <textarea
+        id="question"
+        rows="3"
+        placeholder="질문을 입력하세요..."
+      ></textarea>
+      <button id="ask-btn" onclick="ask()">질문하기</button>
+      <div id="answer-box">답변이 여기에 표시됩니다.</div>
+      <div id="articles"></div>
+    </div>
+
+    <div id="right">
+      <div id="graph"></div>
+      <div id="legend">
+        <div><span class="dot" style="background: #4a90d9"></span>Article</div>
+        <div><span class="dot" style="background: #27ae60"></span>Author</div>
+        <div><span class="dot" style="background: #e67e22"></span>Topic</div>
+      </div>
+    </div>
+
+    <script>
+      const NODE_COLORS = {
+        Article: "#4A90D9",
+        Author: "#27AE60",
+        Topic: "#E67E22",
+      };
+      const NODE_SIZES = { Article: 20, Author: 15, Topic: 10 };
+      const HIGHLIGHT = "#FF4757";
+
+      let network = null;
+      let allNodes = null;
+      let allEdges = null;
+
+      async function loadGraph() {
+        const res = await fetch("/graph/data");
+        const data = await res.json();
+
+        const nodes = data.nodes.map((n) => ({
+          id: n.id,
+          label:
+            n.type === "Article"
+              ? (n.title || n.id).slice(0, 25)
+              : n.name || n.id,
+          color: NODE_COLORS[n.type] || "#888",
+          size: NODE_SIZES[n.type] || 10,
+          title:
+            n.type === "Article"
+              ? `<b>${n.title}</b><br>${n.id}<br>⭐ ${n.points || 0}`
+              : n.name || n.id,
+          type: n.type,
+        }));
+
+        const edges = data.links.map((e, i) => ({
+          id: i,
+          from: e.source,
+          to: e.target,
+          color: { color: "#444" },
+          width: e.relation === "SIMILAR_TO" ? 2 : 1,
+          title: e.relation,
+        }));
+
+        allNodes = new vis.DataSet(nodes);
+        allEdges = new vis.DataSet(edges);
+
+        network = new vis.Network(
+          document.getElementById("graph"),
+          { nodes: allNodes, edges: allEdges },
+          {
+            physics: {
+              barnesHut: { gravitationalConstant: -8000, springLength: 150 },
+            },
+            interaction: { hover: true, tooltipDelay: 100 },
+          },
+        );
+      }
+
+      function highlight(urls) {
+        if (!allNodes) return;
+        const urlSet = new Set(urls);
+        allNodes.forEach((n) => {
+          const isHighlight = urlSet.has(n.id);
+          allNodes.update({
+            id: n.id,
+            color: isHighlight ? HIGHLIGHT : NODE_COLORS[n.type] || "#888",
+            size: isHighlight ? 30 : NODE_SIZES[n.type] || 10,
+          });
+        });
+      }
+
+      async function ask() {
+        const q = document.getElementById("question").value.trim();
+        if (!q) return;
+
+        const btn = document.getElementById("ask-btn");
+        const box = document.getElementById("answer-box");
+        btn.disabled = true;
+        box.textContent = "추론 중...";
+        document.getElementById("articles").innerHTML = "";
+
+        try {
+          const res = await fetch("/qa", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: q }),
+          });
+          const data = await res.json();
+
+          box.textContent = data.answer;
+
+          const artDiv = document.getElementById("articles");
+          if (data.retrieved_articles?.length) {
+            artDiv.innerHTML =
+              "<div style='margin-bottom:4px;color:#aaa'>관련 기사:</div>" +
+              data.retrieved_articles
+                .map((url) => `<a href="${url}" target="_blank">${url}</a>`)
+                .join("");
+            highlight(data.retrieved_articles);
+          }
+        } catch (e) {
+          box.textContent = "오류가 발생했습니다.";
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      document.getElementById("question").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          ask();
+        }
+      });
+
+      loadGraph();
+    </script>
+  </body>
+</html>
