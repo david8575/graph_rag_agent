@@ -1,6 +1,9 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
+scheduler = AsyncIOScheduler(
+    timezone="Asia/Seoul",
+    job_default={"misfire_grace_time": 300}
+)
 
 def start_scheduler():
     from api.routes.pipeline import _run_pipeline
