@@ -124,7 +124,7 @@ def search_graph(state: QAState) -> QAState:
     for a in articles[:5]:
         print(f"    - {a['title'][:40]}")
 
-    return {**state, "retrieved_articles": articles[:5]}
+    return {**state, "retrieved_articles": articles}
 
 # 노드 4: 답변 생성
 def generate_answer(state: QAState) -> QAState:

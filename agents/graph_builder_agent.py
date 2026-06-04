@@ -11,7 +11,7 @@ GRAPH_PATH = os.path.join(BASE_DIR, "data", "graph.json")
 OLLAMA_URL = "http://localhost:11434"
 EMBED_MODEL = "mxbai-embed-large"
 CHAT_MODEL = "gemma4:e4b"
-SIMILAR_THRESHOLD = 0.75
+SIMILAR_THRESHOLD = 0.90
 REFERENCE_MIN_OVERLAP = 1
 
 llm = OllamaLLM(model=CHAT_MODEL, base_url=OLLAMA_URL)
