@@ -1,9 +1,10 @@
 import json
 import os
 import networkx as nx
+import numpy as np
 from typing import TypedDict, List
 from langgraph.graph import StateGraph, END
-from langchain_ollama import OllamaLLM
+from langchain_ollama import OllamaLLM, OllamaEmbeddings
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GRAPH_PATH = os.path.join(BASE_DIR, "data", "graph.json")
@@ -11,6 +12,7 @@ OLLAMA_URL = "http://localhost:11434"
 CHAT_MODEL = "gemma4:e4b"
 
 llm = OllamaLLM(model=CHAT_MODEL, base_url=OLLAMA_URL)
+embed_model = OllamaEmbeddings(model="mxbai-embed-large", base_url=OLLAMA_URL)
 
 class QAState(TypedDict):
     question: str
@@ -77,54 +79,66 @@ def search_graph(state: QAState) -> QAState:
     G = load_graph()
     keywords = state["keywords"]
     question_type = state["question_type"]
+    question = state["question"]
 
     matched_urls = set()
 
-    # Topic 노드에서 키워드 부분 매칭 -> 연결된 Article 수집
+    # 방법 1: Topic 이름 키워드 매칭
     for node_id, data in G.nodes(data=True):
         if data.get("type") == "Topic":
             topic_name = data.get("name", "")
-
             for kw in keywords:
                 if kw in topic_name or topic_name in kw:
                     for pred in G.predecessors(node_id):
                         if G.nodes[pred].get("type") == "Article":
                             matched_urls.add(pred)
-    
-    # recommand: SIMILAR_TO로 이웃 Article도 포함
+
+    # 방법 2: 질문 임베딩 기반 유사도 검색
+    q_embedding = embed_model.embed_query(question)
+    q_vec = np.array(q_embedding)
+
+    scored = []
+    for node_id, data in G.nodes(data=True):
+        if data.get("type") == "Article" and "embedding" in data:
+            a_vec = np.array(data["embedding"])
+            sim = float(np.dot(q_vec, a_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(a_vec)))
+            scored.append((node_id, sim))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    for url, sim in scored[:3]:
+        print(f"    [vector] {G.nodes[url]['title'][:30]} ({sim:.2f})")
+        matched_urls.add(url)
+
+    # recommend: SIMILAR_TO 이웃 확장
     if question_type == "recommand":
         expanded = set(matched_urls)
-
         for url in matched_urls:
             for neighbor in G.successors(url):
                 if G.nodes[neighbor].get("type") == "Article":
                     edge = G.get_edge_data(url, neighbor, {})
-
                     if edge.get("relation") == "SIMILAR_TO":
                         expanded.add(neighbor)
-
         matched_urls = expanded
 
     articles = []
-    
     for url in matched_urls:
         d = G.nodes[url]
         articles.append({
             "title": d.get("title", ""),
-            "url": url, 
+            "url": url,
             "summary": d.get("summary", ""),
             "author": d.get("author", ""),
-            "points": d.get("point", 0)
+            "points": d.get("points", 0)
         })
-    
+
     articles.sort(key=lambda x: x["points"], reverse=True)
 
     print(f"[search] {len(articles)} found")
-
     for a in articles[:5]:
         print(f"    - {a['title'][:40]}")
 
-    return {**state, "retrieved_articles": articles}
+    return {**state, "retrieved_articles": articles[:5]}
+
 
 # 노드 4: 답변 생성
 def generate_answer(state: QAState) -> QAState:
